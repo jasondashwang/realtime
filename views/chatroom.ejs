@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Chatroom</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" type="text/css" media="screen" href="main.css" />
+</head>
+<body>
+  <h1>Chatroom: <%= name%></h1>
+  <h4>Messages</h4>
+  <div id="feed">
+    <ul id="messages">
+    </ul>
+  </div>
+
+  <div id="form-container">
+    <form id="message-form">
+        <input id="message" name="message" type="text" />
+        <input class="button" type="submit" />
+    </form>
+  </div>
+
+  <script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+
+  <script>
+    function loadMessages () {
+      $.ajax({
+          type: 'GET',
+          url: window.location.href + '/messages',
+          success: (data) => {
+            $('#messages').empty();
+            data.messages.forEach(message => {
+              $('#messages').append(`<li>${message.message} - ${message.author}</li>`)
+            })
+
+          },
+          error: (err) => {
+            console.error(err);
+          }
+        })
+    }
+
+
+    $(document).ready(() => {
+      var name = prompt('Your name');
+      loadMessages();
+
+      setInterval(loadMessages, 5000);
+
+      $('#message-form').submit(evt => {
+        evt.preventDefault();
+        const message = $('#message').val();
+        $('#message').val('');
+
+        $.ajax({
+          type: 'POST',
+          url: window.location.href + '/messages',
+          data: {
+            message,
+            author: name
+          },
+          success: (data) => {
+            $('#messages').append(`<li>${message} - ${name}</li>`)
+          },
+          error: (err) => {
+            console.error(err);
+          }
+        })
+      })
+    })
+
+  </script>
+</body>
+</html>
