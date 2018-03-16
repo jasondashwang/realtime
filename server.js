@@ -37,32 +37,6 @@ app.get('/:chat_id', (req, res) => {
   });
 })
 
-app.get('/:chat_id/messages', (req, res) => {
-  conn.query(`SELECT message_id, message, author FROM messages WHERE chat_id="${req.params.chat_id}" ORDER BY message_id;`, function (err, data) {
-    if (err) {
-      console.error(err);
-      res.status(500).end();
-    } else {
-
-      res.json({
-        messages: data.rows
-      });
-    }
-  })
-})
-
-app.post('/:chat_id/messages', (req, res) => {
-  console.log(req.body.message)
-  conn.query('INSERT INTO messages VALUES($1, $2, NULL, $3)', [req.body.message, req.body.author, req.params.chat_id], (err, data) => {
-    if (err) {
-      console.error(err);
-      res.status(500).end();
-    } else {
-      res.status(201).end();
-    }
-  })
-});
-
 function generateRoomIdentifier() {
   // make a list of legal characters
   // we're intentionally excluding 0, O, I, and 1 for readability
@@ -116,6 +90,85 @@ app.post('/create', (req, res) => {
 
 })
 
-app.listen(8080, () => {
+const server = app.listen(8080, () => {
   console.log('Server running on port 8080');
+})
+
+// Room ID to array of socket names
+const rooms = {
+
+}
+
+const io = require('socket.io')(server);
+
+io.on('connection', (socket) => {
+
+  socket.on('join', (room, name) => {
+
+    socket.join(room);
+    // bind name to socket object
+    socket.name = name;
+    socket.room = room;
+
+    // add socket to new room
+    if (rooms[room]) {
+      rooms[room].push(name);
+    } else {
+      rooms[room] = [name];
+    }
+
+    socket.emit('users', rooms[room]);
+
+    conn.query(`SELECT message_id, message, author FROM messages WHERE chat_id="${room}" ORDER BY message_id;`, function (err, data) {
+      if (err) {
+        console.error(err);
+      } else {
+        socket.emit('messages', data.rows);
+      }
+    })
+
+    socket.to(room).broadcast.emit('join', name);
+
+  })
+
+  socket.on('message', (data) => {
+
+    conn.query('INSERT INTO messages VALUES($1, $2, NULL, $3)', [data.message, data.author, socket.room], (err) => {
+      if (err) {
+        console.error(err);
+      } else {
+        socket.to(socket.room).broadcast.emit('message', data);
+      }
+    })
+  })
+
+  socket.on('name-change', (oldName, newName) => {
+
+    // change the name in the rooms list
+    for (let i = 0; i < rooms[socket.room].length; i++ ) {
+
+      if (rooms[socket.room][i] === oldName) {
+        rooms[socket.room][i] = newName;
+        break;
+      }
+    }
+
+    socket.name = newName;
+
+    socket.to(socket.room).broadcast.emit('name-change', oldName, newName);
+  })
+
+  socket.on('disconnect', () => {
+    if (socket.room) {
+      rooms[socket.room] = rooms[socket.room].filter(socketName => {
+        return socketName !== socket.name;
+      })
+    }
+
+    socket.to(socket.room).broadcast.emit('leave', socket.name);
+  })
+
+  socket.on('error', (err) => {
+    console.error(err);
+  })
 })

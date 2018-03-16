@@ -6,70 +6,112 @@
   <title>Chatroom</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" type="text/css" media="screen" href="main.css" />
+
+  <script
+  src="https://code.jquery.com/jquery-3.3.1.min.js"
+  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+  crossorigin="anonymous"></script>
+  <script src="/socket.io/socket.io.js"></script>
 </head>
 <body>
-  <h1>Chatroom: <%= name%></h1>
+  <h1>Chatroom: <span id="chat_id"><%= name%></span></h1>
+
+  <div class="form-container">
+    <form id="name-form">
+        Your name: <input id="name" name="name" type="text" />
+        <input class="button" type="submit" />
+    </form>
+  </div>
+
+  <hr>
+
+  <h4>Live Users</h4>
+  <div>
+    <ul id="users">
+    </ul>
+  </div>
+
+  <hr>
+
   <h4>Messages</h4>
-  <div id="feed">
+  <div>
     <ul id="messages">
     </ul>
   </div>
 
-  <div id="form-container">
+  <hr>
+
+  <div class="form-container">
     <form id="message-form">
         <input id="message" name="message" type="text" />
         <input class="button" type="submit" />
     </form>
   </div>
 
-  <script
-  src="https://code.jquery.com/jquery-3.3.1.min.js"
-  integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
-  crossorigin="anonymous"></script>
-
   <script>
-    function loadMessages () {
-      $.ajax({
-          type: 'GET',
-          url: window.location.href + '/messages',
-          success: (data) => {
-            $('#messages').empty();
-            data.messages.forEach(message => {
-              $('#messages').append(`<li>${message.message} - ${message.author}</li>`)
-            })
-
-          },
-          error: (err) => {
-            console.error(err);
-          }
-        })
-    }
-
-
     $(document).ready(() => {
-      var name = prompt('Your name');
-      loadMessages();
+      var room_name = $('#chat_id').html();
+      var socket = io.connect();
 
-      setInterval(loadMessages, 5000);
+      socket.on('messages', messages => {
+        messages.forEach(message => {
+          $('#messages').append(`<li>${message.message} - ${message.author}</li>`)
+        })
+      })
+
+      socket.on('users', users => {
+        users.forEach(user => {
+          $('#users').append(`<li id="user-${user}">${user}</li>`)
+        })
+      })
+
+      socket.on('message', data => {
+        $('#messages').append(`<li>${data.message} - ${data.author}</li>`)
+      })
+
+      socket.on('join', name => {
+        // someone's name joins
+        $('#users').append(`<li id="user-${name}">${name}</li>`)
+      })
+
+      socket.on('name-change', (oldName, newName) => {
+        $(`#user-${oldName}`).remove();
+        $('#users').append(`<li id="user-${newName}">${newName}</li>`)
+      })
+
+      socket.on('leave', name => {
+        $(`#user-${name}`).remove();
+      })
+
+      let name = prompt('Your name');
+
+      $('#name').val(name);
+
+      socket.emit('join', room_name, name)
+
+      $('#name-form').submit(evt => {
+        evt.preventDefault();
+        let newName = $('#name').val();
+
+        socket.emit('name-change', name, newName);
+
+        $(`#user-${name}`).remove();
+        $('#users').append(`<li id="user-${newName}">${newName}</li>`)
+
+        name = newName;
+      })
 
       $('#message-form').submit(evt => {
         evt.preventDefault();
         const message = $('#message').val();
         $('#message').val('');
 
-        $.ajax({
-          type: 'POST',
-          url: window.location.href + '/messages',
-          data: {
-            message,
-            author: name
-          },
-          success: (data) => {
-            $('#messages').append(`<li>${message} - ${name}</li>`)
-          },
-          error: (err) => {
-            console.error(err);
-          }
+
+        $('#messages').append(`<li>${message} - ${name}</li>`)
+
+        socket.emit('message', {
+          message,
+          author: name
         })
       })
     })
